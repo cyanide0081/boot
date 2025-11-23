@@ -23,9 +23,10 @@ __start:
     mov bx, error_reading_disk_msg
     call bios_print
 
+;; print string using BIOS video service (real mode only)
 bios_print:
     pusha
-    mov ah, 0x0e ; BIOS display char proc
+    mov ah, 0x0E ; BIOS display char proc
 
 .bios_print_loop:
     cmp byte [bx], 0
@@ -60,7 +61,7 @@ dap_sectors_count:
 
 SECTOR_SIZE equ 512
 READ_SECTORS_COUNT equ 64
-BOOT_LOAD_ADDR equ 0x7c00
+BOOT_LOAD_ADDR equ 0x7C00
 SND_STAGE_ADDR equ (BOOT_LOAD_ADDR + SECTOR_SIZE)
 
 init_msg:
@@ -89,6 +90,9 @@ stage_2_start:
     ;; code segment
     jmp CODE_SEG32: start_prot_mode
 
+stage_2_msg:
+    db "Switching to 32-bit protected mode...", 0
+
 [bits 32]
 start_prot_mode:
     ;; old segments are now meaningless
@@ -98,9 +102,6 @@ start_prot_mode:
     mov es, ax
     mov fs, ax
     mov gs, ax 
-
-    mov bx, prot_mode_msg
-    call print_32
 
     ;; build page table and switch to long mode
     mov ebx, 0x1000
@@ -115,7 +116,7 @@ start_prot_mode:
     ;; the EFER (extended feature enable register)
     ;; MSR (model-specific register) contains information related to long mode
     ;; operation - bit 8 if this MSR is the LME (long mode enable)
-    mov ecx, 0xc0000080
+    mov ecx, 0xC0000080
     rdmsr
     or eax, 1 << 8
     wrmsr
@@ -130,30 +131,7 @@ start_prot_mode:
 
     jmp CODE_SEG64: start_long_mode
 
-VGA_BUF equ 0xb8000
-WB_COLOR equ 0xf
-
-print_32:
-    pusha
-
-    mov edx, VGA_BUF
-
-.print_32_loop:
-    cmp byte [ebx], 0
-    je .print_32_ret
-
-    mov al, [ebx]
-    mov ah, WB_COLOR
-    mov [edx], ax
-
-    add ebx, 1 ; next char
-    add edx, 2 ; next VGA buffer cell
-    jmp .print_32_loop
-
-.print_32_ret:
-    popa
-    ret
-
+;; page table definitions
 PAGE64_PAGE_SIZE equ 0x1000 ; 4096
 PAGE64_TAB_SIZE equ 0x1000
 PAGE64_TAB_ENT_NUM equ 512
@@ -201,23 +179,11 @@ build_page_table:
 [bits 64]
 
 start_long_mode:
-    mov rbx, comp_mode_msg 
-    call print_64
-
     call kernel_start
 
 end:
     hlt
     jmp end
-
-stage_2_msg:
-    db "Switching to 32-bit protected mode...", 0
-
-prot_mode_msg:
-    db "Hello from 32-bit protected mode!", 0
-
-comp_mode_msg:
-    db "Hello from 64-bit compatibility mode!", 0
 
 %include "gdt32.asm"
 %include "gdt64.asm"

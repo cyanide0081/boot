@@ -17,7 +17,7 @@ __start:
     jmp 0: SND_STAGE_ADDR
 
 .error_reading_disk:
-    cmp word[dap_sectors_count], READ_SECTORS_COUNT
+    cmp word [dap_sectors_count], READ_SECTORS_COUNT
     jle .ignore_error_reading_disk
 
     mov bx, error_reading_disk_msg
@@ -28,7 +28,7 @@ bios_print:
     mov ah, 0x0e ; BIOS display char proc
 
 .bios_print_loop:
-    cmp byte[bx], 0
+    cmp byte [bx], 0
     je .bios_print_ret
 
     mov al, [bx]
@@ -121,23 +121,25 @@ start_prot_mode:
     wrmsr
 
     ;; enable paging (PG flag in cr0, bit 31)
-    mov ebx, long_mode_msg 
-    call print_32
-
+    mov eax, cr0
+    or eax, 1 << 31
+    mov cr0, eax
+    
     ;; new GDT has the 64-bit segment flag set
     lgdt [gdt64_pseudo_descriptor]
+
     jmp CODE_SEG64: start_long_mode
+
+VGA_BUF equ 0xb8000
+WB_COLOR equ 0xf
 
 print_32:
     pusha
 
-    VGA_BUF equ 0xb8000
-    WB_COLOR equ 0xf
-
     mov edx, VGA_BUF
 
 .print_32_loop:
-    cmp byte[ebx], 0
+    cmp byte [ebx], 0
     je .print_32_ret
 
     mov al, [ebx]
@@ -172,16 +174,26 @@ build_page_table:
     lea eax, [edi + (PAGE64_TAB_SIZE | 11b)] ; r/w and present flags
     mov dword [edi], eax
 
+    ;; link first entry in PDP table to PD table
+    add edi, PAGE64_TAB_SIZE
+    add eax, PAGE64_TAB_SIZE
+    mov dword [edi], eax
+
+    ;; link first entry in PD table to page table
+    add edi, PAGE64_TAB_SIZE
+    add eax, PAGE64_TAB_SIZE
+    mov dword [edi], eax
+
     ;; init only a single page on the lowest layer
     add edi, PAGE64_TAB_SIZE
     mov ebx, 11b
     mov ecx, PAGE64_TAB_ENT_NUM
 
-.set_page_table_entry:
+.build_page_table_set_entry:
     mov dword [edi], ebx
     add ebx, PAGE64_PAGE_SIZE
     add edi, 8
-    loop .set_page_table_entry
+    loop .build_page_table_set_entry
 
     popa
     ret
@@ -189,9 +201,14 @@ build_page_table:
 [bits 64]
 
 start_long_mode:
-    ;; TODO: load a simple kernel with a text buffer
+    mov rbx, comp_mode_msg 
+    call print_64
+
+    call kernel_start
+
+end:
     hlt
-    jmp start_long_mode
+    jmp end
 
 stage_2_msg:
     db "Switching to 32-bit protected mode...", 0
@@ -199,8 +216,9 @@ stage_2_msg:
 prot_mode_msg:
     db "Hello from 32-bit protected mode!", 0
 
-long_mode_msg:
+comp_mode_msg:
     db "Hello from 64-bit compatibility mode!", 0
 
 %include "gdt32.asm"
 %include "gdt64.asm"
+%include "kernel.asm"

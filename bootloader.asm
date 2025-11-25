@@ -3,7 +3,14 @@ global __start
 
 [bits 16]
 
+jmp __start
+times 0x22 db 0; dodge BIOS mangling
+
 __start:
+    xor ax, ax
+    mov ss, ax
+    mov sp, 0x7C00
+
     mov bx, init_msg
     call bios_print
 
@@ -14,7 +21,7 @@ __start:
     jc .error_reading_disk
 
 .ignore_error_reading_disk:
-    jmp 0: SND_STAGE_ADDR
+    jmp 0: STAGE_2_ADDR
 
 .error_reading_disk:
     cmp word [dap_sectors_count], READ_SECTORS_COUNT
@@ -62,7 +69,7 @@ dap_sectors_count:
 SECTOR_SIZE equ 512
 READ_SECTORS_COUNT equ 64
 BOOT_LOAD_ADDR equ 0x7C00
-SND_STAGE_ADDR equ (BOOT_LOAD_ADDR + SECTOR_SIZE)
+STAGE_2_ADDR equ (BOOT_LOAD_ADDR + SECTOR_SIZE)
 
 init_msg:
     db "Initializing boot loader...", 0 
